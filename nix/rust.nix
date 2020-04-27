@@ -3,8 +3,8 @@
 let
   pkgs =
     import sources.nixpkgs { overlays = [ (import sources.nixpkgs-mozilla) ]; };
-  channel = "stable";
-  version = "1.43.0";
+  channel = "nightly";
+  version = "27.04.2020";
   targets = [ ];
   extensions = [ "rust-src" "rls-preview" "rust-analysis" "rustfmt-preview" ];
   rustChannelOfTargetsAndExtensions = channel: version: targets: extensions:
