@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
+use arrayvec::ArrayVec;
 use core::convert::TryInto;
-use stackvec::StackVec;
 
 use arraystring::{typenum::U24, ArrayString};
 
@@ -16,7 +16,7 @@ impl Filename {
         // Unfortunately, the const fn constructor for GBFSFilesystem
         // can't use dynamically-sized data structures.
         // Therefore, we have to strip out the trailing nulls from the filename here.
-        let no_nulls: StackVec<[u8; crate::FILENAME_LEN]> = self
+        let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> = self
             .backing
             .iter()
             .filter(|x| **x != 0)
