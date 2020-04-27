@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 arraystring = {version = "0.3.0", default_features = false}
-stackvec = "0.2.1"
+stackvec = {version = "0.2.1", default_features = false}
