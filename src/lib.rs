@@ -81,6 +81,38 @@ pub struct File<'a> {
     pub data: &'a [u8],
 }
 
+impl<'a> File<'a> {
+    /// Converts the file data to a vector of u16's.
+    /// Note that this function currently panics if the length of data is not divisible by 2.
+    pub fn to_u16_vec(&self) -> Vec<u16> {
+        // TODO: Proper error handling
+        // TODO: Figure out whether returning data on the stack is possible here
+        if (self.data.len() % 2) != 0 {
+            panic!("Attempt to obtain u16 from file with odd number of bytes");
+        }
+        let mut u16_vec: Vec<u16> = Vec::with_capacity(self.data.len() / 2);
+        self.data
+            .chunks(2)
+            .for_each(|x| u16_vec.push(u16::from_be_bytes(x.try_into().unwrap())));
+        return u16_vec;
+    }
+
+    /// Converts the file data to a vector of u32's.
+    /// Note that this function currently panics if the length of data is not divisible by 2.
+    pub fn to_u32_vec(&self) -> Vec<u32> {
+        // TODO: Proper error handling
+        // TODO: Figure out whether returning data on the stack is possible here
+        if (self.data.len() % 2) != 0 {
+            panic!("Attempt to obtain u32 from file with number of bytes not divisible by 4");
+        }
+        let mut u32_vec: Vec<u32> = Vec::with_capacity(self.data.len() / 4);
+        self.data
+            .chunks(4)
+            .for_each(|x| u32_vec.push(u32::from_be_bytes(x.try_into().unwrap())));
+        return u32_vec;
+    }
+}
+
 impl<'a> GBFSFilesystem<'a> {
     /// Constructs a new filesystem reader from a byte slice.
     pub fn from_slice(data: &'a [u8]) -> GBFSFilesystem<'a> {
