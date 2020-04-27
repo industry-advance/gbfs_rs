@@ -102,7 +102,7 @@ impl<'a> File<'a> {
     pub fn to_u32_vec(&self) -> Vec<u32> {
         // TODO: Proper error handling
         // TODO: Figure out whether returning data on the stack is possible here
-        if (self.data.len() % 2) != 0 {
+        if (self.data.len() % 4) != 0 {
             panic!("Attempt to obtain u32 from file with number of bytes not divisible by 4");
         }
         let mut u32_vec: Vec<u32> = Vec::with_capacity(self.data.len() / 4);
