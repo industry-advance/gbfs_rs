@@ -30,6 +30,17 @@ fn read_file_by_name() {
 }
 
 #[test]
+fn read_file_data_by_name() {
+    let mut file = File::open("test_assets/assets.gbfs").unwrap();
+    let mut test_data = Vec::new();
+    file.read_to_end(&mut test_data).unwrap();
+    let gbfs = GBFSFilesystem::from_slice(test_data.as_ref());
+    let filename = FilenameString::try_from_str("copper1Tiles").unwrap();
+    let data = gbfs.get_file_data_by_name(filename).unwrap();
+    assert_eq!(data.len(), 256);
+}
+
+#[test]
 fn read_file_by_name_const_fs() {
     let filename = FilenameString::try_from_str("copper1Tiles").unwrap();
     assert_eq!(
@@ -40,6 +51,13 @@ fn read_file_by_name_const_fs() {
             .as_string(),
         filename
     );
+}
+
+#[test]
+fn read_file_data_by_name_const_fs() {
+    let filename = FilenameString::try_from_str("copper1Tiles").unwrap();
+    let data: &'static [u8] = TEST_FS.get_file_data_by_name(filename).unwrap();
+    assert_eq!(data.len(), 256);
 }
 
 #[test]

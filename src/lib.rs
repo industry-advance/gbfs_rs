@@ -113,6 +113,24 @@ impl<'a> GBFSFilesystem<'a> {
         }
     }
 
+    /// Gets file data by index in directory table.
+    fn get_file_data_by_index(&self, index: usize) -> &'a [u8] {
+        // The storage format changes based on whether we have a static filesystem or
+        // once created at runtime.
+        if self.dir_as_vec.is_some() {
+            let dir = self.dir_as_vec.as_ref().unwrap();
+            return &self.data[dir[index].data_offset as usize
+                ..(dir[index].data_offset as usize + dir[index].len as usize)];
+        } else {
+            let dir = self.dir_as_array.as_ref().unwrap();
+            return &self.data[dir[index].as_ref().unwrap().data_offset as usize
+                ..(dir[index].as_ref().unwrap().data_offset as usize
+                    + dir[index].as_ref().unwrap().len as usize)];
+        }
+    }
+
+    // TODO: DRY the methods below
+
     /// Gets the file with name.
     /// `None` is returned if no file has that name.
     pub fn get_file_by_name(&self, name: FilenameString) -> Option<File> {
@@ -143,7 +161,39 @@ impl<'a> GBFSFilesystem<'a> {
             return None;
         }
     }
+
+    /// Similar to `get_file_by_name()`, but returns a slice of the file's data instead of a `File` struct.
+    /// This is useful because you don't have to keep around the `File` struct for lifetime reasons.
+    pub fn get_file_data_by_name(&self, name: FilenameString) -> Option<&'a [u8]> {
+        // The iteration changes based on whether we have a static filesystem or
+        // once created at runtime.
+        if self.dir_as_vec.is_some() {
+            let dir = self.dir_as_vec.as_ref().unwrap();
+            for (i, entry) in dir.iter().enumerate() {
+                if entry.name.as_string() == name {
+                    return Some(self.get_file_data_by_index(i));
+                }
+            }
+            return None;
+        } else {
+            // In this case, dir entries are stored in a fixed-size
+            // array using an Option to denote occupied slots.
+            let dir = self.dir_as_array.as_ref().unwrap();
+            for (i, entry) in dir.iter().enumerate() {
+                match entry {
+                    Some(inner_entry) => {
+                        if inner_entry.name.as_string() == name {
+                            return Some(self.get_file_data_by_index(i));
+                        }
+                    }
+                    None => return None,
+                }
+            }
+            return None;
+        }
+    }
 }
+
 impl<'a> IntoIterator for GBFSFilesystem<'a> {
     type Item = File<'a>;
     type IntoIter = GBFSFilesystemIterator<'a>;
