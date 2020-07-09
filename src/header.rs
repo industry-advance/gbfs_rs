@@ -1,6 +1,8 @@
 const MAGIC: &[u8] = "PinEightGBFS\r\n\u{1a}\n".as_bytes();
 pub(crate) const GBFS_HEADER_LENGTH: usize = 32;
 
+use crate::GBFSError;
+
 #[derive(Debug, Clone)]
 pub(crate) struct GBFSHeader {
     pub(crate) total_len: u32,       /* total length of archive */
@@ -9,14 +11,16 @@ pub(crate) struct GBFSHeader {
 }
 
 impl GBFSHeader {
-    pub(crate) const fn from_slice(data: &[u8; GBFS_HEADER_LENGTH]) -> GBFSHeader {
+    pub(crate) const fn from_slice(
+        data: &[u8; GBFS_HEADER_LENGTH],
+    ) -> Result<GBFSHeader, GBFSError> {
         // I apologize for the ugly code below. It's needed due to const fn limitations.
 
         // Ensure magic is correct by checking char-for-char
         let mut i = 0;
         while i < 16 {
             if data[i] != MAGIC[i] {
-                panic!("Invalid magic");
+                return Err(GBFSError::WrongMagic);
             }
             i += 1;
         }
@@ -38,10 +42,10 @@ impl GBFSHeader {
             }
             i += 1;
         }
-        return GBFSHeader {
+        return Ok(GBFSHeader {
             total_len,
             dir_off,
             dir_num_members,
-        };
+        });
     }
 }

@@ -5,9 +5,13 @@
 #![feature(const_mut_refs)]
 #![feature(const_in_array_repeat_expressions)]
 
+//! This crate enables reading of Gameboy Filesystem (`GBFS`)-formatted data.
+//! It's primarily designed for use in GBA games, and as such is fully `no_std` compatible (even `alloc` is not required).
+
 mod header;
 use header::*;
 
+use core::fmt;
 use core::u32;
 
 use arraystring::{typenum::U24, ArrayString};
@@ -20,6 +24,32 @@ const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
 const NUM_FS_ENTRIES: usize = 2048;
 
+/// Top-level error type for this crate.
+#[derive(Debug, Clone)]
+pub enum GBFSError {
+    /// Returned when an invalid filename is encountered in the GBFS archive.
+    InvalidFilenameError(arraystring::Error),
+    /// Returned when trying to get a slice of u16/u32 from a file which size is not a multiple of 2/4 bytes.
+    FileLengthNotMultipleOf { multiple: usize, length: usize },
+    /// Returned when a file with the given name does not exist.
+    NoSuchFile(Filename),
+    /// Returned when trying to open a GBFS archive which starts with incorrect magic bytes.
+    WrongMagic,
+}
+
+impl fmt::Display for GBFSError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use GBFSError::*;
+        match self {
+            InvalidFilenameError(err) => write!(f, "Encountered file with invalid name: {}", err),
+            FileLengthNotMultipleOf {multiple, length} => write!(f, "Attempt to access file as slice of values with length of {} bytes, but file is {} bytes long and length is not multiple of {} bytes", multiple, length, multiple),
+            NoSuchFile(name) => write!(f, "File \"{}\" does not exist in filesystem", name),
+            WrongMagic => write!(f, "GBFS archive has incorrect magic bytes"),
+        }
+    }
+}
+
+/// The name of a GBFS file. This is not a regular string because filenames have a limited length.
 pub type Filename = ArrayString<U24>;
 
 #[derive(Debug, Clone)]
@@ -37,18 +67,20 @@ struct GBFSFileEntry {
 
 impl GBFSFileEntry {
     /// Compare the name with a Filename.
-    fn name_is_equal(&self, name: Filename) -> bool {
+    fn name_is_equal(&self, name: Filename) -> Result<bool, GBFSError> {
         // Unfortunately, the const fn constructor for GBFSFilesystem
         // can't use dynamically-sized data structures.
         // Therefore, we have to strip out the trailing nulls from the filename here.
         let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> =
             self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
-        let our_name = Filename::try_from_utf8(&no_nulls.as_ref())
-            .expect("Encountered file in FS with name that's not UTF-8");
-        return name == our_name;
+        match Filename::try_from_utf8(&no_nulls.as_ref()) {
+            Err(e) => return Err(GBFSError::InvalidFilenameError(e)),
+            Ok(our_name) => return Ok(name == our_name),
+        }
     }
 }
 
+/// A filesystem that files can be read from.
 #[derive(Clone)]
 pub struct GBFSFilesystem<'a> {
     /// Backing data slice
@@ -60,23 +92,27 @@ pub struct GBFSFilesystem<'a> {
 }
 
 impl<'a> GBFSFilesystem<'a> {
-    /// Constructs a new filesystem reader from a byte slice.
-
-    /// Creates a fully `const` and `static`-friendly filesystem.
-    /// Perfect for embedding assets in ROM without having to worry about
-    /// runtime overhead in terms of CPU or RAM usage, as well as lifetimes.
-    /// All the files returned have the `'static` lifetime.
-    pub const fn from_slice(data: &'a [u8]) -> GBFSFilesystem<'a> {
+    /// Constructs a new filesystem from a GBFS-formatted byte slice.
+    ///
+    /// To make lifetime management easier it's probably a good idea to use a slice with a `static` lifetime here.
+    /// It's also a good idea to ensure this function is called at compile time with a `const` argument,
+    /// to avoid having to store the filesystem index in RAM.
+    pub const fn from_slice(data: &'a [u8]) -> Result<GBFSFilesystem<'a>, GBFSError> {
         // Brace yourself for some very ugly code caused by the limitations of const fn below.
         // Create the FS header
         // Forgive me God, for I have sinned
         // TODO: Clean up this mess (maybe a macro?)
-        let hdr = GBFSHeader::from_slice(&[
+        let hdr: GBFSHeader;
+
+        match GBFSHeader::from_slice(&[
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
             data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16],
             data[17], data[18], data[19], data[20], data[21], data[22], data[23], data[24],
             data[25], data[26], data[27], data[28], data[29], data[30], data[31],
-        ]);
+        ]) {
+            Ok(val) => hdr = val,
+            Err(err) => return Err(err),
+        }
         // Create the FS entry table
         // Read directory entries
         let mut dir_entries: [Option<GBFSFileEntry>; NUM_FS_ENTRIES] = [None; NUM_FS_ENTRIES];
@@ -136,11 +172,11 @@ impl<'a> GBFSFilesystem<'a> {
             });
             i += 1;
         }
-        return GBFSFilesystem {
+        return Ok(GBFSFilesystem {
             data,
             hdr,
             dir: dir_entries,
-        };
+        });
     }
 
     /// Gets file data by index in directory table.
@@ -149,70 +185,65 @@ impl<'a> GBFSFilesystem<'a> {
         // once created at runtime.
         let dir_entry_wrapped = self.dir[index].clone();
         let dir_entry = dir_entry_wrapped
-            .expect("Attempt to access file with nonexistent index")
+            // This should never trigger.
+            .expect("Attempt to access file with nonexistent index. This is a bug in gbfs_rs.")
             .clone();
         return &self.data[dir_entry.data_offset as usize
             ..(dir_entry.data_offset as usize + dir_entry.len as usize)];
     }
 
-    // TODO: DRY the methods below
-
-    /// Similar to `get_file_by_name()`, but returns a slice of the file's data instead of a `File` struct.
-    /// This is useful because you don't have to keep around the `File` struct for lifetime reasons.
-    pub fn get_file_data_by_name(&self, name: Filename) -> Option<&'a [u8]> {
+    /// Returns a reference to the file data as a slice of u8's.
+    /// An error is returned if the file does not exist.
+    pub fn get_file_data_by_name(&self, name: Filename) -> Result<&'a [u8], GBFSError> {
         // In this case, dir entries are stored in a fixed-size
         // array using an Option to denote occupied slots.
         for (i, entry) in self.dir.iter().enumerate() {
             match entry {
                 Some(inner_entry) => {
-                    if inner_entry.name_is_equal(name) {
-                        return Some(self.get_file_data_by_index(i));
+                    if inner_entry.name_is_equal(name)? {
+                        return Ok(self.get_file_data_by_index(i));
                     }
                 }
-                None => return None,
+                None => return Err(GBFSError::NoSuchFile(name.clone())),
             }
         }
-        return None;
+        return Err(GBFSError::NoSuchFile(name.clone()));
     }
 
     /// Returns a reference to the file data as a slice of u32's.
-    /// Note that this function currently panics if the length of data is not divisible by 2.
-    pub fn get_file_data_by_name_as_u16_slice(&self, name: Filename) -> Option<&'a [u16]> {
-        // TODO: Proper error handling
+    /// An error is returned if the file does not exist or it's length is not a multiple of 2.
+    pub fn get_file_data_by_name_as_u16_slice(
+        &self,
+        name: Filename,
+    ) -> Result<&'a [u16], GBFSError> {
         if (self.data.len() % 2) != 0 {
-            panic!("Attempt to obtain u16 from file with odd number of bytes");
+            return Err(GBFSError::FileLengthNotMultipleOf {
+                multiple: 2,
+                length: self.data.len(),
+            });
         }
-        for (i, entry) in self.dir.iter().enumerate() {
-            match entry {
-                Some(inner_entry) => {
-                    if inner_entry.name_is_equal(name) {
-                        return Some(self.get_file_data_by_index(i).as_slice_of::<u16>().unwrap());
-                    }
-                }
-                None => return None,
-            }
-        }
-        return None;
+        return Ok(self
+            .get_file_data_by_name(name)?
+            .as_slice_of::<u16>()
+            .unwrap());
     }
 
     /// Returns a reference to the file data as a slice of u32's.
-    /// Note that this function currently panics if the length of data is not divisible by 2.
-    pub fn get_file_data_by_name_as_u32_slice(&self, name: Filename) -> Option<&'a [u32]> {
-        // TODO: Proper error handling
+    /// An error is returned if the file does not exist or it's length is not a multiple of 4.
+    pub fn get_file_data_by_name_as_u32_slice(
+        &self,
+        name: Filename,
+    ) -> Result<&'a [u32], GBFSError> {
         if (self.data.len() % 4) != 0 {
-            panic!("Attempt to obtain u32 from file with number of bytes not divisible by 4");
+            return Err(GBFSError::FileLengthNotMultipleOf {
+                multiple: 4,
+                length: self.data.len(),
+            });
         }
-        for (i, entry) in self.dir.iter().enumerate() {
-            match entry {
-                Some(inner_entry) => {
-                    if inner_entry.name_is_equal(name) {
-                        return Some(self.get_file_data_by_index(i).as_slice_of::<u32>().unwrap());
-                    }
-                }
-                None => return None,
-            }
-        }
-        return None;
+        return Ok(self
+            .get_file_data_by_name(name)?
+            .as_slice_of::<u32>()
+            .unwrap());
     }
 }
 
