@@ -28,15 +28,13 @@ fn read_file_data_by_name() {
     let mut test_data = Vec::new();
     file.read_to_end(&mut test_data).unwrap();
     let gbfs = GBFSFilesystem::from_slice(test_data.as_ref()).unwrap();
-    let filename = Filename::try_from_str("copper1Tiles").unwrap();
-    let file_data = gbfs.get_file_data_by_name(filename).unwrap();
+    let file_data = gbfs.get_file_data_by_name("copper1Tiles").unwrap();
     assert_eq!(file_data.len(), 256);
 }
 
 #[test]
 fn read_file_data_by_name_const_fs() {
-    let filename = Filename::try_from_str("copper1Tiles").unwrap();
-    let data: &'static [u8] = TEST_FS.get_file_data_by_name(filename).unwrap();
+    let data: &'static [u8] = TEST_FS.get_file_data_by_name("copper1Tiles").unwrap();
     assert_eq!(data.len(), 256);
 }
 
@@ -61,8 +59,9 @@ fn read_file_as_u16() {
     let mut test_data = Vec::new();
     file.read_to_end(&mut test_data).unwrap();
     let gbfs = GBFSFilesystem::from_slice(test_data.as_ref()).unwrap();
-    let filename = Filename::try_from_str("copper1Tiles").unwrap();
-    let gbfs_file = gbfs.get_file_data_by_name_as_u16_slice(filename).unwrap();
+    let gbfs_file = gbfs
+        .get_file_data_by_name_as_u16_slice("copper1Tiles")
+        .unwrap();
     assert_eq!(gbfs_file.len(), 128);
 }
 #[test]
@@ -71,7 +70,8 @@ fn read_file_as_u32() {
     let mut test_data = Vec::new();
     file.read_to_end(&mut test_data).unwrap();
     let gbfs = GBFSFilesystem::from_slice(test_data.as_ref()).unwrap();
-    let filename = Filename::try_from_str("copper1Tiles").unwrap();
-    let gbfs_file = gbfs.get_file_data_by_name_as_u32_slice(filename).unwrap();
+    let gbfs_file = gbfs
+        .get_file_data_by_name_as_u32_slice("copper1Tiles")
+        .unwrap();
     assert_eq!(gbfs_file.len(), 64);
 }

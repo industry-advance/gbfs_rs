@@ -20,6 +20,7 @@ use byte_slice_cast::AsSliceOf;
 
 /// Maximum length of a filename in bytes. Is 24 in the pin-eight C implementation
 const FILENAME_LEN: usize = 24;
+/// Length of a single file's entry in the directory that precedes the data.
 const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
 const NUM_FS_ENTRIES: usize = 2048;
@@ -28,7 +29,9 @@ const NUM_FS_ENTRIES: usize = 2048;
 #[derive(Debug, Clone)]
 pub enum GBFSError {
     /// Returned when an invalid filename is encountered in the GBFS archive.
-    InvalidFilenameError(arraystring::Error),
+    ArchiveInvalidFilenameError(arraystring::Error),
+    /// Returned when an invalid filename is supplied by the calling code.
+    UserInvalidFilenameError(arraystring::error::OutOfBounds),
     /// Returned when trying to get a slice of u16/u32 from a file which size is not a multiple of 2/4 bytes.
     FileLengthNotMultipleOf { multiple: usize, length: usize },
     /// Returned when a file with the given name does not exist.
@@ -41,7 +44,8 @@ impl fmt::Display for GBFSError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use GBFSError::*;
         match self {
-            InvalidFilenameError(err) => write!(f, "Encountered file with invalid name: {}", err),
+            ArchiveInvalidFilenameError(err) => write!(f, "Encountered file with invalid name: {}", err),
+            UserInvalidFilenameError(err) => write!(f, "Was given invalid filename: {}", err),
             FileLengthNotMultipleOf {multiple, length} => write!(f, "Attempt to access file as slice of values with length of {} bytes, but file is {} bytes long and length is not multiple of {} bytes", multiple, length, multiple),
             NoSuchFile(name) => write!(f, "File \"{}\" does not exist in filesystem", name),
             WrongMagic => write!(f, "GBFS archive has incorrect magic bytes"),
@@ -50,7 +54,7 @@ impl fmt::Display for GBFSError {
 }
 
 /// The name of a GBFS file. This is not a regular string because filenames have a limited length.
-pub type Filename = ArrayString<U24>;
+type Filename = ArrayString<U24>;
 
 #[derive(Debug, Clone)]
 // Needed to ensure proper alignment for casting u8 slices to u16/u32 slices
@@ -74,7 +78,7 @@ impl GBFSFileEntry {
         let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> =
             self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
         match Filename::try_from_utf8(&no_nulls.as_ref()) {
-            Err(e) => return Err(GBFSError::InvalidFilenameError(e)),
+            Err(e) => return Err(GBFSError::ArchiveInvalidFilenameError(e)),
             Ok(our_name) => return Ok(name == our_name),
         }
     }
@@ -193,8 +197,15 @@ impl<'a> GBFSFilesystem<'a> {
     }
 
     /// Returns a reference to the file data as a slice of u8's.
-    /// An error is returned if the file does not exist.
-    pub fn get_file_data_by_name(&self, name: Filename) -> Result<&'a [u8], GBFSError> {
+    /// An error is returned if the file does not exist or the filename is invalid.
+    /// All filenames longer than 24 characters are invalid.
+    pub fn get_file_data_by_name(&self, str_name: &str) -> Result<&'a [u8], GBFSError> {
+        let name: Filename;
+        match Filename::try_from_str(str_name) {
+            Ok(val) => name = val,
+            Err(e) => return Err(GBFSError::UserInvalidFilenameError(e)),
+        }
+
         // In this case, dir entries are stored in a fixed-size
         // array using an Option to denote occupied slots.
         for (i, entry) in self.dir.iter().enumerate() {
@@ -211,11 +222,10 @@ impl<'a> GBFSFilesystem<'a> {
     }
 
     /// Returns a reference to the file data as a slice of u32's.
-    /// An error is returned if the file does not exist or it's length is not a multiple of 2.
-    pub fn get_file_data_by_name_as_u16_slice(
-        &self,
-        name: Filename,
-    ) -> Result<&'a [u16], GBFSError> {
+    /// An error is returned if the file does not exist, it's length is not a multiple of 2
+    /// or the filename is invalid.
+    /// All filenames longer than 24 characters are invalid.
+    pub fn get_file_data_by_name_as_u16_slice(&self, name: &str) -> Result<&'a [u16], GBFSError> {
         if (self.data.len() % 2) != 0 {
             return Err(GBFSError::FileLengthNotMultipleOf {
                 multiple: 2,
@@ -229,11 +239,10 @@ impl<'a> GBFSFilesystem<'a> {
     }
 
     /// Returns a reference to the file data as a slice of u32's.
-    /// An error is returned if the file does not exist or it's length is not a multiple of 4.
-    pub fn get_file_data_by_name_as_u32_slice(
-        &self,
-        name: Filename,
-    ) -> Result<&'a [u32], GBFSError> {
+    /// An error is returned if the file does not exist, it's length is not a multiple of 4
+    /// or the filename is invalid.
+    /// All filenames longer than 24 characters are invalid.
+    pub fn get_file_data_by_name_as_u32_slice(&self, name: &str) -> Result<&'a [u32], GBFSError> {
         if (self.data.len() % 4) != 0 {
             return Err(GBFSError::FileLengthNotMultipleOf {
                 multiple: 4,
