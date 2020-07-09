@@ -1,7 +1,5 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![feature(const_if_match)]
-#![feature(const_loop)]
 #![feature(const_fn)]
 #![feature(const_panic)]
 #![feature(const_mut_refs)]
@@ -12,10 +10,11 @@ use header::*;
 
 use core::u32;
 
-use byte_slice_cast::AsSliceOf;
-use arrayvec::ArrayVec;
 use arraystring::{typenum::U24, ArrayString};
+use arrayvec::ArrayVec;
+use byte_slice_cast::AsSliceOf;
 
+/// Maximum length of a filename in bytes. Is 24 in the pin-eight C implementation
 const FILENAME_LEN: usize = 24;
 const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
@@ -24,6 +23,8 @@ const NUM_FS_ENTRIES: usize = 2048;
 pub type Filename = ArrayString<U24>;
 
 #[derive(Debug, Clone)]
+// Needed to ensure proper alignment for casting u8 slices to u16/u32 slices
+#[repr(align(4))]
 struct GBFSFileEntry {
     /// Name of file; at most 24 bytes.
     /// TODO: Once const fn's can perform subslicing, use a slice here
@@ -40,12 +41,10 @@ impl GBFSFileEntry {
         // Unfortunately, the const fn constructor for GBFSFilesystem
         // can't use dynamically-sized data structures.
         // Therefore, we have to strip out the trailing nulls from the filename here.
-        let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> = self.name
-            .iter()
-            .filter(|x| **x != 0)
-            .map(|x| *x)
-            .collect();
-        let our_name = Filename::try_from_utf8(&no_nulls.as_ref()).expect("Encountered file in FS with name that's not UTF-8");
+        let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> =
+            self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
+        let our_name = Filename::try_from_utf8(&no_nulls.as_ref())
+            .expect("Encountered file in FS with name that's not UTF-8");
         return name == our_name;
     }
 }
