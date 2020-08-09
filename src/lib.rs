@@ -8,10 +8,12 @@
 //! This crate enables reading of Gameboy Filesystem (`GBFS`)-formatted data.
 //! It's primarily designed for use in GBA games, and as such is fully `no_std` compatible (even `alloc` is not required).
 
+mod error;
+pub use error::*;
+
 mod header;
 use header::*;
 
-use core::fmt;
 use core::u32;
 
 use arraystring::{typenum::U24, ArrayString};
@@ -25,40 +27,12 @@ const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
 const NUM_FS_ENTRIES: usize = 2048;
 
-/// Top-level error type for this crate.
-#[derive(Debug, Clone)]
-pub enum GBFSError {
-    /// Returned when an invalid filename is encountered in the GBFS archive.
-    ArchiveInvalidFilenameError(arraystring::Error),
-    /// Returned when an invalid filename is supplied by the calling code.
-    UserInvalidFilenameError(arraystring::error::OutOfBounds),
-    /// Returned when trying to get a slice of u16/u32 from a file which size is not a multiple of 2/4 bytes.
-    FileLengthNotMultipleOf { multiple: usize, length: usize },
-    /// Returned when a file with the given name does not exist.
-    NoSuchFile(Filename),
-    /// Returned when trying to open a GBFS archive which starts with incorrect magic bytes.
-    WrongMagic,
-}
 
-impl fmt::Display for GBFSError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use GBFSError::*;
-        match self {
-            ArchiveInvalidFilenameError(err) => write!(f, "Encountered file with invalid name: {}", err),
-            UserInvalidFilenameError(err) => write!(f, "Was given invalid filename: {}", err),
-            FileLengthNotMultipleOf {multiple, length} => write!(f, "Attempt to access file as slice of values with length of {} bytes, but file is {} bytes long and length is not multiple of {} bytes", multiple, length, multiple),
-            NoSuchFile(name) => write!(f, "File \"{}\" does not exist in filesystem", name),
-            WrongMagic => write!(f, "GBFS archive has incorrect magic bytes"),
-        }
-    }
-}
 
 /// The name of a GBFS file. This is not a regular string because filenames have a limited length.
 type Filename = ArrayString<U24>;
 
 #[derive(Debug, Clone)]
-// Needed to ensure proper alignment for casting u8 slices to u16/u32 slices
-#[repr(align(4))]
 struct GBFSFileEntry {
     /// Name of file; at most 24 bytes.
     /// TODO: Once const fn's can perform subslicing, use a slice here
@@ -78,13 +52,16 @@ impl GBFSFileEntry {
         let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> =
             self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
         match Filename::try_from_utf8(&no_nulls.as_ref()) {
-            Err(e) => return Err(GBFSError::ArchiveInvalidFilenameError(e)),
+            Err(e) => return Err(GBFSError::ArchiveInvalidFilename(e)),
             Ok(our_name) => return Ok(name == our_name),
         }
     }
 }
 
 /// A filesystem that files can be read from.
+// Needed to ensure proper alignment for casting u8 slices to u16/u32 slices
+#[repr(align(4))]
+#[repr(C)]
 #[derive(Clone)]
 pub struct GBFSFilesystem<'a> {
     /// Backing data slice
@@ -102,6 +79,7 @@ impl<'a> GBFSFilesystem<'a> {
     /// It's also a good idea to ensure this function is called at compile time with a `const` argument,
     /// to avoid having to store the filesystem index in RAM.
     pub const fn from_slice(data: &'a [u8]) -> Result<GBFSFilesystem<'a>, GBFSError> {
+        // TODO: Assert slice alignment
         // Brace yourself for some very ugly code caused by the limitations of const fn below.
         // Create the FS header
         // Forgive me God, for I have sinned
@@ -203,7 +181,7 @@ impl<'a> GBFSFilesystem<'a> {
         let name: Filename;
         match Filename::try_from_str(str_name) {
             Ok(val) => name = val,
-            Err(e) => return Err(GBFSError::UserInvalidFilenameError(e)),
+            Err(e) => return Err(GBFSError::UserInvalidFilename(e)),
         }
 
         // In this case, dir entries are stored in a fixed-size
@@ -226,16 +204,10 @@ impl<'a> GBFSFilesystem<'a> {
     /// or the filename is invalid.
     /// All filenames longer than 24 characters are invalid.
     pub fn get_file_data_by_name_as_u16_slice(&self, name: &str) -> Result<&'a [u16], GBFSError> {
-        if (self.data.len() % 2) != 0 {
-            return Err(GBFSError::FileLengthNotMultipleOf {
-                multiple: 2,
-                length: self.data.len(),
-            });
-        }
         return Ok(self
             .get_file_data_by_name(name)?
             .as_slice_of::<u16>()
-            .unwrap());
+            ?);
     }
 
     /// Returns a reference to the file data as a slice of u32's.
@@ -243,16 +215,10 @@ impl<'a> GBFSFilesystem<'a> {
     /// or the filename is invalid.
     /// All filenames longer than 24 characters are invalid.
     pub fn get_file_data_by_name_as_u32_slice(&self, name: &str) -> Result<&'a [u32], GBFSError> {
-        if (self.data.len() % 4) != 0 {
-            return Err(GBFSError::FileLengthNotMultipleOf {
-                multiple: 4,
-                length: self.data.len(),
-            });
-        }
         return Ok(self
             .get_file_data_by_name(name)?
             .as_slice_of::<u32>()
-            .unwrap());
+            ?);
     }
 }
 
