@@ -1,6 +1,5 @@
-
-use core::{convert, fmt};
 use crate::Filename;
+use core::{convert, fmt};
 
 /// Various error conditions that can occur when working with GBFS archives.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,5 +33,4 @@ impl convert::From<byte_slice_cast::Error> for GBFSError {
     fn from(error: byte_slice_cast::Error) -> Self {
         GBFSError::Cast(error)
     }
-
-} 
+}

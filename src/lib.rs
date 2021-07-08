@@ -1,9 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![feature(const_fn)]
 #![feature(const_panic)]
 #![feature(const_mut_refs)]
-#![feature(const_in_array_repeat_expressions)]
 
 //! This crate enables reading of Gameboy Filesystem (`GBFS`)-formatted data.
 //! It's primarily designed for use in GBA games, and as such is fully `no_std` compatible (even `alloc` is not required).
@@ -27,12 +25,10 @@ const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
 const NUM_FS_ENTRIES: usize = 2048;
 
-
-
 /// The name of a GBFS file. This is not a regular string because filenames have a limited length.
 type Filename = ArrayString<U24>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct GBFSFileEntry {
     /// Name of file; at most 24 bytes.
     /// TODO: Once const fn's can perform subslicing, use a slice here
@@ -49,7 +45,7 @@ impl GBFSFileEntry {
         // Unfortunately, the const fn constructor for GBFSFilesystem
         // can't use dynamically-sized data structures.
         // Therefore, we have to strip out the trailing nulls from the filename here.
-        let no_nulls: ArrayVec<[u8; crate::FILENAME_LEN]> =
+        let no_nulls: ArrayVec<u8, { crate::FILENAME_LEN }> =
             self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
         match Filename::try_from_utf8(&no_nulls.as_ref()) {
             Err(e) => return Err(GBFSError::ArchiveInvalidFilename(e)),
@@ -204,10 +200,7 @@ impl<'a> GBFSFilesystem<'a> {
     /// or the filename is invalid.
     /// All filenames longer than 24 characters are invalid.
     pub fn get_file_data_by_name_as_u16_slice(&self, name: &str) -> Result<&'a [u16], GBFSError> {
-        return Ok(self
-            .get_file_data_by_name(name)?
-            .as_slice_of::<u16>()
-            ?);
+        return Ok(self.get_file_data_by_name(name)?.as_slice_of::<u16>()?);
     }
 
     /// Returns a reference to the file data as a slice of u32's.
@@ -215,10 +208,7 @@ impl<'a> GBFSFilesystem<'a> {
     /// or the filename is invalid.
     /// All filenames longer than 24 characters are invalid.
     pub fn get_file_data_by_name_as_u32_slice(&self, name: &str) -> Result<&'a [u32], GBFSError> {
-        return Ok(self
-            .get_file_data_by_name(name)?
-            .as_slice_of::<u32>()
-            ?);
+        return Ok(self.get_file_data_by_name(name)?.as_slice_of::<u32>()?);
     }
 }
 

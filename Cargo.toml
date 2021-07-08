@@ -1,6 +1,6 @@
 [package]
 name = "gbfs_rs"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["casept <davids.paskevics@gmail.com>"]
 edition = "2018"
 
@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 arraystring = {version = "0.3.0", default_features = false}
-arrayvec = {version = "0.5.1", default_features = false}
-byte-slice-cast = {version = "0.3.5", default_features = false}
+arrayvec = {version = "0.7.1", default_features = false}
+byte-slice-cast = {version = "1", default_features = false}

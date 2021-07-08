@@ -10,7 +10,8 @@ use std::io::Read;
 const TEST_FS_DATA: &'static [u8] = include_bytes!("../test_assets/assets.gbfs");
 const TEST_FS: GBFSFilesystem<'static> = match GBFSFilesystem::from_slice(TEST_FS_DATA) {
     Ok(val) => val,
-    Err(e) => panic!(e),
+    // FIXME: Stop being lazy and implement a const fn-compatible mechanism to turn the error into &str
+    Err(_) => panic!("Failed to construct filesystem!"),
 };
 const NUM_FILES_IN_TEST_FS: usize = 570;
 
