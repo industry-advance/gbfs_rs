@@ -103,6 +103,12 @@ impl<'a> GBFSFilesystem<'a> {
         let mut dir_entries: [Option<GBFSFileEntry>; NUM_FS_ENTRIES] = [None; NUM_FS_ENTRIES];
         // Can't use a for loop here because they're not yet supported in const fn's
         let mut i = 0;
+        if (hdr.dir_num_members as usize) > NUM_FS_ENTRIES {
+            return Err(GBFSError::TooManyEntries(
+                NUM_FS_ENTRIES,
+                hdr.dir_num_members as usize,
+            ));
+        }
         while i < hdr.dir_num_members as usize {
             let entry_start = hdr.dir_off as usize + ((i as usize) * DIR_ENTRY_LEN);
             // Extract filename

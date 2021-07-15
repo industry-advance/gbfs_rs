@@ -16,6 +16,8 @@ pub enum GBFSError {
     NoSuchFile(Filename),
     /// Returned when a file is truncated.
     Truncated,
+    /// Returned when an archive contains too many entries.
+    TooManyEntries(usize, usize),
 }
 
 impl fmt::Display for GBFSError {
@@ -32,6 +34,11 @@ impl fmt::Display for GBFSError {
             Cast(err) => write!(f, "Failed to cast from u8 slice: {}", err),
             NoSuchFile(name) => write!(f, "File \"{}\" does not exist in filesystem", name),
             Truncated => write!(f, "Encountered truncated file entry"),
+            TooManyEntries(expected, actual) => write!(
+                f,
+                "Encountered archive with too many entries: at most {} entries are supported, but got {}",
+                expected, actual
+            ),
         }
     }
 }
