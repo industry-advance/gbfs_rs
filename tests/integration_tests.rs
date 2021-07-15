@@ -1,8 +1,6 @@
 #![feature(const_panic)]
 
-extern crate gbfs_rs;
-
-use gbfs_rs::*;
+use gbfs::*;
 
 use std::fs::File;
 use std::io::Read;

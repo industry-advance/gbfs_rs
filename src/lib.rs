@@ -2,31 +2,31 @@
 #![forbid(unsafe_code)]
 #![feature(const_panic)]
 #![feature(const_mut_refs)]
+#![allow(clippy::needless_return)]
 
 //! This crate enables reading of Gameboy Filesystem (`GBFS`)-formatted data.
 //! It's primarily designed for use in GBA games, and as such is fully `no_std` compatible (even `alloc` is not required).
 
 mod error;
 pub use error::*;
-
 mod header;
 use header::*;
 
+use core::str;
 use core::u32;
 
-use arraystring::{typenum::U24, ArrayString};
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayString, ArrayVec};
 use byte_slice_cast::AsSliceOf;
 
 /// Maximum length of a filename in bytes. Is 24 in the pin-eight C implementation
-const FILENAME_LEN: usize = 24;
+pub const FILENAME_LEN: usize = 24;
 /// Length of a single file's entry in the directory that precedes the data.
 const DIR_ENTRY_LEN: usize = 32;
 // TODO: Allow control at build-time by user for different ROM use/flexibility tradeoffs.
 const NUM_FS_ENTRIES: usize = 2048;
 
 /// The name of a GBFS file. This is not a regular string because filenames have a limited length.
-type Filename = ArrayString<U24>;
+type Filename = ArrayString<FILENAME_LEN>;
 
 #[derive(Debug, Copy, Clone)]
 struct GBFSFileEntry {
@@ -45,10 +45,14 @@ impl GBFSFileEntry {
         // Unfortunately, the const fn constructor for GBFSFilesystem
         // can't use dynamically-sized data structures.
         // Therefore, we have to strip out the trailing nulls from the filename here.
-        let no_nulls: ArrayVec<u8, { crate::FILENAME_LEN }> =
-            self.name.iter().filter(|x| **x != 0).map(|x| *x).collect();
-        match Filename::try_from_utf8(&no_nulls.as_ref()) {
-            Err(e) => return Err(GBFSError::ArchiveInvalidFilename(e)),
+        let no_nulls: ArrayVec<u8, { FILENAME_LEN }> =
+            self.name.iter().filter(|x| **x != 0).copied().collect();
+        let filename_str: &str = match str::from_utf8(no_nulls.as_ref()) {
+            Ok(s) => s,
+            Err(e) => return Err(GBFSError::Utf8Error(e)),
+        };
+        match Filename::from(filename_str) {
+            Err(_) => return Err(GBFSError::FilenameTooLong(FILENAME_LEN, filename_str.len())),
             Ok(our_name) => return Ok(name == our_name),
         }
     }
@@ -161,23 +165,22 @@ impl<'a> GBFSFilesystem<'a> {
     fn get_file_data_by_index(&self, index: usize) -> &'a [u8] {
         // The storage format changes based on whether we have a static filesystem or
         // once created at runtime.
-        let dir_entry_wrapped = self.dir[index].clone();
+        let dir_entry_wrapped = self.dir[index];
         let dir_entry = dir_entry_wrapped
             // This should never trigger.
-            .expect("Attempt to access file with nonexistent index. This is a bug in gbfs_rs.")
-            .clone();
+            .expect("Attempt to access file with nonexistent index. This is a bug in gbfs_rs.");
         return &self.data[dir_entry.data_offset as usize
             ..(dir_entry.data_offset as usize + dir_entry.len as usize)];
     }
 
     /// Returns a reference to the file data as a slice of u8's.
     /// An error is returned if the file does not exist or the filename is invalid.
-    /// All filenames longer than 24 characters are invalid.
+    /// All filenames longer than `FILENAME_LEN` characters are invalid.
     pub fn get_file_data_by_name(&self, str_name: &str) -> Result<&'a [u8], GBFSError> {
         let name: Filename;
-        match Filename::try_from_str(str_name) {
+        match Filename::from(str_name) {
             Ok(val) => name = val,
-            Err(e) => return Err(GBFSError::UserInvalidFilename(e)),
+            Err(_) => return Err(GBFSError::FilenameTooLong(FILENAME_LEN, str_name.len())),
         }
 
         // In this case, dir entries are stored in a fixed-size
@@ -189,10 +192,10 @@ impl<'a> GBFSFilesystem<'a> {
                         return Ok(self.get_file_data_by_index(i));
                     }
                 }
-                None => return Err(GBFSError::NoSuchFile(name.clone())),
+                None => return Err(GBFSError::NoSuchFile(name)),
             }
         }
-        return Err(GBFSError::NoSuchFile(name.clone()));
+        return Err(GBFSError::NoSuchFile(name));
     }
 
     /// Returns a reference to the file data as a slice of u32's.
