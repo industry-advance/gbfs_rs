@@ -20,7 +20,7 @@ impl GBFSHeader {
         let mut i = 0;
         while i < 16 {
             if data[i] != MAGIC[i] {
-                return Err(GBFSError::WrongMagic);
+                return Err(GBFSError::HeaderInvalid);
             }
             i += 1;
         }
@@ -36,9 +36,10 @@ impl GBFSHeader {
         // of the format.
         // We can't use assert_eq! here because it's not permitted in const fn's.
         let mut i = 24;
+        // Are reserved bytes 0 as expected?
         while i < 32 {
             if data[i] != 0 {
-                panic!("Attempt to construct filesystem with unknown reserved bytes")
+                return Err(GBFSError::HeaderInvalid);
             }
             i += 1;
         }

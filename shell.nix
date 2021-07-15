@@ -1,6 +1,6 @@
 let
   sources = import ./nix/sources.nix;
   rust = import ./nix/rust.nix { inherit sources; };
-  nixpkgs = import sources.nixpkgs { };
+  pkgs = import sources.nixpkgs { };
   niv = import sources.niv { inherit sources; };
-in nixpkgs.mkShell { buildInputs = [ rust niv.niv ]; }
+in pkgs.mkShell { buildInputs = [ rust pkgs.cargo-fuzz niv.niv ]; }

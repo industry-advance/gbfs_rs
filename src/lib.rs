@@ -86,6 +86,9 @@ impl<'a> GBFSFilesystem<'a> {
         // TODO: Clean up this mess (maybe a macro?)
         let hdr: GBFSHeader;
 
+        if data.len() < header::GBFS_HEADER_LENGTH {
+            return Err(GBFSError::HeaderInvalid);
+        }
         match GBFSHeader::from_slice(&[
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
             data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16],
@@ -103,6 +106,9 @@ impl<'a> GBFSFilesystem<'a> {
         while i < hdr.dir_num_members as usize {
             let entry_start = hdr.dir_off as usize + ((i as usize) * DIR_ENTRY_LEN);
             // Extract filename
+            if data.len() < entry_start + FILENAME_LEN {
+                return Err(GBFSError::Truncated);
+            }
             // TODO: DRY
             let filename: [u8; FILENAME_LEN] = [
                 data[entry_start],
@@ -132,6 +138,9 @@ impl<'a> GBFSFilesystem<'a> {
             ];
 
             // Extract length of file in bytes
+            if data.len() < entry_start + FILENAME_LEN + 4 {
+                return Err(GBFSError::Truncated);
+            };
             let len = u32::from_le_bytes([
                 data[(entry_start + FILENAME_LEN)],
                 data[entry_start + FILENAME_LEN + 1],
@@ -140,6 +149,9 @@ impl<'a> GBFSFilesystem<'a> {
             ]);
 
             // Extract offset of file data from FS start
+            if data.len() < entry_start + FILENAME_LEN + 8 {
+                return Err(GBFSError::Truncated);
+            };
             let data_offset = u32::from_le_bytes([
                 data[(entry_start + FILENAME_LEN + 4)],
                 data[entry_start + FILENAME_LEN + 5],
