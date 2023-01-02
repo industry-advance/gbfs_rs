@@ -1,5 +1,3 @@
-#![feature(const_panic)]
-
 use gbfs::*;
 
 use std::fs::File;

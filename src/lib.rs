@@ -1,7 +1,5 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![feature(const_panic)]
-#![feature(const_mut_refs)]
 #![allow(clippy::needless_return)]
 
 //! This crate enables reading of Gameboy Filesystem (`GBFS`)-formatted data.
