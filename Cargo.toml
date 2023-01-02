@@ -2,7 +2,7 @@
 name = "gbfs"
 version = "0.2.2"
 authors = ["casept <davids.paskevics@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 homepage = "https://github.com/industry-advance/gbfs_rs"
 repository = "https://github.com/industry-advance/gbfs_rs"
