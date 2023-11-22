@@ -5,7 +5,6 @@ use crate::GBFSError;
 
 #[derive(Debug, Clone)]
 pub(crate) struct GBFSHeader {
-    pub(crate) total_len: u32,       /* total length of archive */
     pub(crate) dir_off: u16,         /* offset in bytes to directory */
     pub(crate) dir_num_members: u16, /* number of files */
 }
@@ -25,8 +24,6 @@ impl GBFSHeader {
             i += 1;
         }
 
-        // Read total length of archive
-        let total_len = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
         // Read offset in bytes to directory
         let dir_off = u16::from_le_bytes([data[20], data[21]]);
         // Read number of files in dir
@@ -44,7 +41,6 @@ impl GBFSHeader {
             i += 1;
         }
         return Ok(GBFSHeader {
-            total_len,
             dir_off,
             dir_num_members,
         });

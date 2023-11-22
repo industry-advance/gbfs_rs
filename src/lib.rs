@@ -82,20 +82,19 @@ impl<'a> GBFSFilesystem<'a> {
         // Create the FS header
         // Forgive me God, for I have sinned
         // TODO: Clean up this mess (maybe a macro?)
-        let hdr: GBFSHeader;
 
         if data.len() < header::GBFS_HEADER_LENGTH {
             return Err(GBFSError::HeaderInvalid);
         }
-        match GBFSHeader::from_slice(&[
+        let hdr = match GBFSHeader::from_slice(&[
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
             data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16],
             data[17], data[18], data[19], data[20], data[21], data[22], data[23], data[24],
             data[25], data[26], data[27], data[28], data[29], data[30], data[31],
         ]) {
-            Ok(val) => hdr = val,
+            Ok(val) => val,
             Err(err) => return Err(err),
-        }
+        };
         // Create the FS entry table
         // Read directory entries
         let mut dir_entries: [Option<GBFSFileEntry>; NUM_FS_ENTRIES] = [None; NUM_FS_ENTRIES];
@@ -108,7 +107,7 @@ impl<'a> GBFSFilesystem<'a> {
             ));
         }
         while i < hdr.dir_num_members as usize {
-            let entry_start = hdr.dir_off as usize + ((i as usize) * DIR_ENTRY_LEN);
+            let entry_start = hdr.dir_off as usize + (i * DIR_ENTRY_LEN);
             // Extract filename
             if data.len() < entry_start + FILENAME_LEN {
                 return Err(GBFSError::Truncated);
@@ -146,7 +145,7 @@ impl<'a> GBFSFilesystem<'a> {
                 return Err(GBFSError::Truncated);
             };
             let len = u32::from_le_bytes([
-                data[(entry_start + FILENAME_LEN)],
+                data[entry_start + FILENAME_LEN],
                 data[entry_start + FILENAME_LEN + 1],
                 data[entry_start + FILENAME_LEN + 2],
                 data[entry_start + FILENAME_LEN + 3],
@@ -157,7 +156,7 @@ impl<'a> GBFSFilesystem<'a> {
                 return Err(GBFSError::Truncated);
             };
             let data_offset = u32::from_le_bytes([
-                data[(entry_start + FILENAME_LEN + 4)],
+                data[entry_start + FILENAME_LEN + 4],
                 data[entry_start + FILENAME_LEN + 5],
                 data[entry_start + FILENAME_LEN + 6],
                 data[entry_start + FILENAME_LEN + 7],
@@ -193,11 +192,10 @@ impl<'a> GBFSFilesystem<'a> {
     /// An error is returned if the file does not exist or the filename is invalid.
     /// All filenames longer than `FILENAME_LEN` characters are invalid.
     pub fn get_file_data_by_name(&self, str_name: &str) -> Result<&'a [u8], GBFSError> {
-        let name: Filename;
-        match Filename::from(str_name) {
-            Ok(val) => name = val,
+        let name = match Filename::from(str_name) {
+            Ok(val) => val,
             Err(_) => return Err(GBFSError::FilenameTooLong(FILENAME_LEN, str_name.len())),
-        }
+        };
 
         // In this case, dir entries are stored in a fixed-size
         // array using an Option to denote occupied slots.
