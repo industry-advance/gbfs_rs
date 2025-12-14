@@ -9,5 +9,5 @@ repository = "https://github.com/industry-advance/gbfs_rs"
 description = "A crate for reading gameboy filesystem archives, a format commonly used in GBA homebrew games."
 
 [dependencies]
-arrayvec = {version = "0.7.2", default_features = false}
+arrayvec = {version = "0.7.6", default_features = false}
 byte-slice-cast = {version = "1", default_features = false}
