@@ -11,7 +11,6 @@ mod header;
 use header::*;
 
 use core::str;
-use core::u32;
 
 use arrayvec::{ArrayString, ArrayVec};
 use byte_slice_cast::AsSliceOf;
